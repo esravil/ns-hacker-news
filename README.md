@@ -16,6 +16,7 @@ nsreddit is a small, anonymous discussion forum MVP for the Network State commun
 
 ```bash
 npm install
+```
 2. Configure environment variables in .env.local for:
 
 - Supabase (URL and anon key)
