@@ -9,6 +9,7 @@ export type Thread = {
   url_domain: string | null;
   media_url: string | null;
   media_mime_type: string | null;
+  is_deleted: boolean;
 };
 
 export type Comment = {

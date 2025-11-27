@@ -333,14 +333,17 @@ export default function ThreadClient({
     }
   }
 
+  const isThreadDeleted = thread.is_deleted === true;
+
   const isOwner =
     !!user && !!thread.author_id && user.id === thread.author_id;
 
-  const threadAuthorDisplayName =
-    (thread.author_display_name && thread.author_display_name.trim()) ||
-    (thread.author_id
-      ? `user-${thread.author_id.slice(0, 8)}`
-      : "anonymous");
+  const threadAuthorDisplayName = isThreadDeleted
+    ? "[ redacted ]"
+    : (thread.author_display_name && thread.author_display_name.trim()) ||
+      (thread.author_id
+        ? `user-${thread.author_id.slice(0, 8)}`
+        : "anonymous");
 
   async function handleDeleteThread() {
     if (!user) {
@@ -909,7 +912,7 @@ export default function ThreadClient({
           <header className="space-y-2">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
               <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-                {thread.title}
+                {isThreadDeleted ? "[deleted]" : thread.title}
               </h1>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                 {formatTimeAgo(thread.created_at)}
@@ -965,7 +968,7 @@ export default function ThreadClient({
             )}
 
           <p className="whitespace-pre-wrap text-sm text-zinc-800 dark:text-zinc-200">
-            {thread.body}
+            {isThreadDeleted ? "[deleted]" : thread.body}
           </p>
 
           <div className="mt-2 flex items-center justify-between">

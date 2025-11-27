@@ -13,6 +13,7 @@ type ThreadRow = {
   url_domain: string | null;
   media_url: string | null;
   media_mime_type: string | null;
+  is_deleted: boolean;
 };
 
 type CommentRow = {
@@ -54,10 +55,9 @@ export default async function ThreadPage(props: ThreadPageProps) {
   } = await supabase
     .from("threads")
     .select(
-      "id, title, body, created_at, author_id, url, url_domain, media_url, media_mime_type, profiles!threads_author_id_fkey(display_name)"
+      "id, title, body, created_at, author_id, url, url_domain, media_url, media_mime_type, is_deleted, profiles!threads_author_id_fkey(display_name)"
     )
     .eq("id", threadId)
-    .eq("is_deleted", false)
     .maybeSingle<any>();
 
   if (!rawThread || threadError) {
@@ -83,11 +83,12 @@ export default async function ThreadPage(props: ThreadPageProps) {
     body: rawThread.body as string,
     created_at: rawThread.created_at as string,
     author_id: threadAuthorId,
-    author_display_name: threadDisplayName,
+    author_display_name: threadAuthorDisplayName,
     url: (rawThread.url as string | null) ?? null,
     url_domain: (rawThread.url_domain as string | null) ?? null,
     media_url: (rawThread.media_url as string | null) ?? null,
     media_mime_type: (rawThread.media_mime_type as string | null) ?? null,
+    is_deleted: (rawThread.is_deleted as boolean) ?? false,
   };
 
   // Load comments with joined author display names

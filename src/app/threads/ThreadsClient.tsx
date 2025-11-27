@@ -50,9 +50,7 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
   const [votes, setVotes] = useState<Record<number, VoteValue>>({});
   const [voteError, setVoteError] = useState<string | null>(null);
 
-  // Only show non-deleted threads in the main list; tombstoned threads remain
-  // accessible via direct permalinks on the thread page.
-  const visibleThreads = threads.filter((t) => !t.is_deleted);
+  // Threads list is already filtered on the server to exclude deleted threads.
 
   // Load existing votes for the current user on these threads
   useEffect(() => {
