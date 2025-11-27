@@ -6,32 +6,17 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { formatTimeAgo } from "@/lib/time";
 import { useToast } from "@/components/ui/ToastProvider";
-
-type Thread = {
-  id: number;
-  title: string;
-  body: string;
-  created_at: string;
-  author_id: string | null;
-  author_display_name: string | null;
-  url: string | null;
-  url_domain: string | null;
-  media_url: string | null;
-  media_mime_type: string | null;
-};
-
-type Comment = {
-  id: number;
-  body: string;
-  created_at: string;
-  author_id: string | null;
-  parent_id: number | null;
-  author_display_name: string | null;
-};
-
-type CommentNode = Comment & {
-  children: CommentNode[];
-};
+import scrollIntoView from "scroll-into-view-if-needed";
+import { buildCommentTree, MAX_NESTING_DEPTH } from "./commentTree";
+import type {
+  Thread,
+  Comment,
+  CommentNode,
+  VoteValue,
+  VoteKey,
+} from "./threadTypes";
+import { VoteControls } from "@/components/votes/VoteControls";
+import { CommentComposer } from "./components/CommentComposer";
 
 type ThreadClientProps = {
   thread: Thread;
@@ -40,11 +25,6 @@ type ThreadClientProps = {
   initialCommentScores: Record<number, number>;
 };
 
-type VoteValue = -1 | 0 | 1;
-type VoteKey = string;
-
-const MAX_NESTING_DEPTH = 6;
-
 function makeVoteKey(type: "thread" | "comment", id: number): VoteKey {
   return `${type}:${id}`;
 }
@@ -52,30 +32,6 @@ function makeVoteKey(type: "thread" | "comment", id: number): VoteKey {
 function getNextVoteValue(current: VoteValue, direction: 1 | -1): VoteValue {
   if (current === direction) return 0;
   return direction;
-}
-
-function buildCommentTree(comments: Comment[]): CommentNode[] {
-  const nodesById = new Map<number, CommentNode>();
-  const roots: CommentNode[] = [];
-
-  for (const comment of comments) {
-    nodesById.set(comment.id, { ...comment, children: [] });
-  }
-
-  for (const node of nodesById.values()) {
-    if (node.parent_id && nodesById.has(node.parent_id)) {
-      const parent = nodesById.get(node.parent_id);
-      if (parent) {
-        parent.children.push(node);
-      } else {
-        roots.push(node);
-      }
-    } else {
-      roots.push(node);
-    }
-  }
-
-  return roots;
 }
 
 export default function ThreadClient({
@@ -94,7 +50,6 @@ export default function ThreadClient({
     initialCommentScores
   );
   const [votes, setVotes] = useState<Record<VoteKey, VoteValue>>({});
-  const [focusedCommentId, setFocusedCommentId] = useState<number | null>(null);
 
   const [commentBody, setCommentBody] = useState("");
   const [replyBody, setReplyBody] = useState("");
@@ -111,21 +66,33 @@ export default function ThreadClient({
   }, [comments]);
 
   const {
-    commentIndexById,
-    orderedCommentIds,
     parentById,
     rootById,
+    topLevelIds,
+    topLevelIndexById,
+    siblingsByParentId,
+    siblingIndexById,
   } = useMemo(() => {
-    const indexMap = new Map<number, number>();
     const parentMap = new Map<number, number | null>();
+    const rootMap = new Map<number, number>();
+    const siblingsMap = new Map<number | null, number[]>();
+    const byId = new Map<number, Comment>();
 
-    comments.forEach((c, index) => {
-      indexMap.set(c.id, index);
+    // Build parent map, sibling lists, and id -> comment map
+    comments.forEach((c) => {
       parentMap.set(c.id, c.parent_id);
+      byId.set(c.id, c);
+
+      const key = c.parent_id ?? null;
+      const existing = siblingsMap.get(key);
+      if (existing) {
+        existing.push(c.id);
+      } else {
+        siblingsMap.set(key, [c.id]);
+      }
     });
 
-    const rootMap = new Map<number, number>();
-
+    // Resolve root (top-level ancestor) for each comment
     function findRoot(id: number): number {
       if (rootMap.has(id)) return rootMap.get(id)!;
       const parentId = parentMap.get(id);
@@ -142,25 +109,39 @@ export default function ThreadClient({
       findRoot(c.id);
     });
 
+    // Top-level comments (no parent) — sort freshest first by created_at
+    const topLevelIds = (siblingsMap.get(null) ?? []).slice();
+    topLevelIds.sort((aId, bId) => {
+      const a = byId.get(aId)!;
+      const b = byId.get(bId)!;
+      if (a.created_at === b.created_at) return 0;
+      // Later created_at should come first (freshest at the top)
+      return a.created_at < b.created_at ? 1 : -1;
+    });
+
+    const topLevelIndexById = new Map<number, number>();
+    topLevelIds.forEach((id, index) => {
+      topLevelIndexById.set(id, index);
+    });
+
+    // Sibling index map for replies (per parent)
+    const siblingIndexById = new Map<number, number>();
+    siblingsMap.forEach((ids, parentId) => {
+      if (parentId === null) return; // skip top-level; handled separately
+      ids.forEach((id, idx) => {
+        siblingIndexById.set(id, idx);
+      });
+    });
+
     return {
-      commentIndexById: indexMap,
-      orderedCommentIds: comments.map((c) => c.id),
       parentById: parentMap,
       rootById: rootMap,
+      topLevelIds,
+      topLevelIndexById,
+      siblingsByParentId: siblingsMap,
+      siblingIndexById,
     };
   }, [comments]);
-
-  useEffect(() => {
-    if (focusedCommentId == null) return;
-
-    const timeoutId = window.setTimeout(() => {
-      setFocusedCommentId(null);
-    }, 3000);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [focusedCommentId]);
 
   // Load current user's votes for this thread and its comments
   useEffect(() => {
@@ -243,49 +224,90 @@ export default function ThreadClient({
   function scrollToComment(targetId: number) {
     if (typeof document === "undefined") return;
     const el = document.getElementById(`comment-${targetId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
+    if (!el) return;
 
-  function focusAndScrollToComment(targetId: number) {
-    scrollToComment(targetId);
-    setFocusedCommentId(targetId);
+    scrollIntoView(el, {
+      scrollMode: "always", // <- don't use "if-needed"
+      behavior: "smooth",
+      block: "start", // <- aim for top of scroll container
+      inline: "nearest",
+    });
   }
 
   function goToRootComment(commentId: number) {
     const rootId = rootById.get(commentId);
-    if (!rootId || rootId === commentId) return;
-    focusAndScrollToComment(rootId);
+    const parentId = parentById.get(commentId) ?? null;
+    // Only useful for deeper replies: skip when root is the comment itself
+    // or when the root is the direct parent (i.e., second-level replies).
+    if (!rootId || rootId === commentId || rootId === parentId) return;
+    scrollToComment(rootId);
   }
 
   function goToParentComment(commentId: number) {
     const parentId = parentById.get(commentId);
     if (!parentId) return;
-    focusAndScrollToComment(parentId);
+    scrollToComment(parentId);
   }
 
   function goToPrevComment(commentId: number) {
-    const idx = commentIndexById.get(commentId);
-    if (idx == null || idx <= 0) return;
-    const prevId = orderedCommentIds[idx - 1];
-    if (prevId != null) {
-      focusAndScrollToComment(prevId);
+    const parentId = parentById.get(commentId) ?? null;
+
+    // Top-level comments: navigate among other top-level comments,
+    // ordered by recency (freshest at index 0).
+    if (parentId === null) {
+      const idx = topLevelIndexById.get(commentId);
+      if (idx == null || idx <= 0) return;
+      const targetId = topLevelIds[idx - 1];
+      if (targetId != null) {
+        scrollToComment(targetId);
+      }
+      return;
+    }
+
+    // Replies: navigate within siblings (same parent).
+    const siblings = siblingsByParentId.get(parentId) ?? [];
+    const siblingIdx = siblingIndexById.get(commentId);
+    if (!siblings.length || siblingIdx == null || siblingIdx <= 0) return;
+    const targetId = siblings[siblingIdx - 1];
+    if (targetId != null) {
+      scrollToComment(targetId);
     }
   }
 
   function goToNextComment(commentId: number) {
-    const idx = commentIndexById.get(commentId);
+    const parentId = parentById.get(commentId) ?? null;
+
+    // Top-level comments: navigate among other top-level comments,
+    // ordered by recency (freshest at index 0).
+    if (parentId === null) {
+      const idx = topLevelIndexById.get(commentId);
+      if (
+        idx == null ||
+        topLevelIds.length === 0 ||
+        idx >= topLevelIds.length - 1
+      ) {
+        return;
+      }
+      const targetId = topLevelIds[idx + 1];
+      if (targetId != null) {
+        scrollToComment(targetId);
+      }
+      return;
+    }
+
+    // Replies: navigate within siblings (same parent).
+    const siblings = siblingsByParentId.get(parentId) ?? [];
+    const siblingIdx = siblingIndexById.get(commentId);
     if (
-      idx == null ||
-      orderedCommentIds.length === 0 ||
-      idx >= orderedCommentIds.length - 1
+      !siblings.length ||
+      siblingIdx == null ||
+      siblingIdx >= siblings.length - 1
     ) {
       return;
     }
-    const nextId = orderedCommentIds[idx + 1];
-    if (nextId != null) {
-      focusAndScrollToComment(nextId);
+    const targetId = siblings[siblingIdx + 1];
+    if (targetId != null) {
+      scrollToComment(targetId);
     }
   }
 
@@ -550,49 +572,6 @@ export default function ThreadClient({
     }
   }
 
-  function renderVoteControls(
-    targetType: "thread" | "comment",
-    targetId: number,
-    score: number
-  ) {
-    const key = makeVoteKey(targetType, targetId);
-    const current = votes[key] ?? 0;
-
-    return (
-      <div className="inline-flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
-        <button
-          type="button"
-          onClick={() => void applyVote(targetType, targetId, 1)}
-          className={[
-            "inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px]",
-            current === 1
-              ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-400 dark:bg-emerald-950/40 dark:text-emerald-200"
-              : "border-zinc-300 bg-white hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-zinc-900",
-          ].join(" ")}
-          aria-label="Upvote"
-        >
-          ▲
-        </button>
-        <span className="min-w-[1.5rem] text-center text-[11px] font-semibold text-zinc-900 dark:text-zinc-100">
-          {score}
-        </span>
-        <button
-          type="button"
-          onClick={() => void applyVote(targetType, targetId, -1)}
-          className={[
-            "inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px]",
-            current === -1
-              ? "border-red-500 bg-red-50 text-red-700 dark:border-red-400 dark:bg-red-950/40 dark:text-red-200"
-              : "border-zinc-300 bg-white hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-zinc-900",
-          ].join(" ")}
-          aria-label="Downvote"
-        >
-          ▼
-        </button>
-      </div>
-    );
-  }
-
   function renderCommentNodes(nodes: CommentNode[], depth = 0): JSX.Element[] {
     return nodes.map((node) => {
       const clampedDepth = Math.min(depth, MAX_NESTING_DEPTH);
@@ -609,18 +588,44 @@ export default function ThreadClient({
         (node.author_display_name && node.author_display_name.trim()) ||
         (node.author_id ? `user-${node.author_id.slice(0, 8)}` : "anonymous");
 
-      const isFocused = focusedCommentId === node.id;
+      const parentId = node.parent_id ?? null;
+      const rootId = rootById.get(node.id);
+      const isTopLevelComment = parentId === null;
+
+      let canGoPrev = false;
+      let canGoNext = false;
+
+      if (isTopLevelComment) {
+        const idx = topLevelIndexById.get(node.id);
+        if (idx != null) {
+          canGoPrev = idx > 0;
+          canGoNext = idx < topLevelIds.length - 1;
+        }
+      } else if (parentId != null) {
+        const siblings = siblingsByParentId.get(parentId) ?? [];
+        const siblingIdx = siblingIndexById.get(node.id);
+        if (siblings.length > 0 && siblingIdx != null) {
+          canGoPrev = siblingIdx > 0;
+          canGoNext = siblingIdx < siblings.length - 1;
+        }
+      }
+
+      const showRootButton =
+        !isTopLevelComment &&
+        !!rootId &&
+        rootId !== node.id &&
+        rootId !== parentId;
+
+      const showParentButton = !!parentId;
+
+      const currentVote =
+        votes[makeVoteKey("comment", node.id)] ?? (0 as VoteValue);
 
       return (
         <li
           key={node.id}
           id={`comment-${node.id}`}
-          className={[
-            "space-y-1 rounded-md",
-            isFocused
-              ? "bg-zinc-50 ring-1 ring-zinc-300 dark:bg-zinc-900/40 dark:ring-zinc-600"
-              : "",
-          ].join(" ")}
+          className="space-y-1 rounded-md"
         >
           <div
             style={indentStyle}
@@ -651,19 +656,26 @@ export default function ThreadClient({
               <p className="whitespace-pre-wrap">{node.body}</p>
 
               <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400">
-                {renderVoteControls("comment", node.id, score)}
+                <VoteControls
+                  targetType="comment"
+                  targetId={node.id}
+                  score={score}
+                  currentVote={currentVote}
+                  onVote={(targetType, targetId, direction) =>
+                    void applyVote(targetType, targetId, direction)
+                  }
+                />
                 <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                  {rootById.get(node.id) &&
-                    rootById.get(node.id) !== node.id && (
-                      <button
-                        type="button"
-                        onClick={() => goToRootComment(node.id)}
-                        className="text-zinc-500 hover:underline dark:text-zinc-400"
-                      >
-                        root
-                      </button>
-                    )}
-                  {node.parent_id && (
+                  {showRootButton && (
+                    <button
+                      type="button"
+                      onClick={() => goToRootComment(node.id)}
+                      className="text-zinc-500 hover:underline dark:text-zinc-400"
+                    >
+                      root
+                    </button>
+                  )}
+                  {showParentButton && (
                     <button
                       type="button"
                       onClick={() => goToParentComment(node.id)}
@@ -672,27 +684,48 @@ export default function ThreadClient({
                       parent
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => goToPrevComment(node.id)}
-                    disabled={(commentIndexById.get(node.id) ?? 0) === 0}
-                    className="text-zinc-500 hover:underline disabled:opacity-40 disabled:no-underline dark:text-zinc-400"
-                  >
-                    prev
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => goToNextComment(node.id)}
-                    disabled={
-                      (commentIndexById.get(node.id) ?? 0) ===
-                      (orderedCommentIds.length > 0
-                        ? orderedCommentIds.length - 1
-                        : 0)
-                    }
-                    className="text-zinc-500 hover:underline disabled:opacity-40 disabled:no-underline dark:text-zinc-400"
-                  >
-                    next
-                  </button>
+                  {isTopLevelComment ? (
+                    <>
+                      {canGoPrev && (
+                        <button
+                          type="button"
+                          onClick={() => goToPrevComment(node.id)}
+                          className="text-zinc-500 hover:underline dark:text-zinc-400"
+                        >
+                          prev
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => goToNextComment(node.id)}
+                        disabled={!canGoNext}
+                        className="text-zinc-500 hover:underline disabled:opacity-40 disabled:no-underline dark:text-zinc-400"
+                      >
+                        next
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {canGoPrev && (
+                        <button
+                          type="button"
+                          onClick={() => goToPrevComment(node.id)}
+                          className="text-zinc-500 hover:underline dark:text-zinc-400"
+                        >
+                          prev
+                        </button>
+                      )}
+                      {canGoNext && (
+                        <button
+                          type="button"
+                          onClick={() => goToNextComment(node.id)}
+                          className="text-zinc-500 hover:underline dark:text-zinc-400"
+                        >
+                          next
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -772,6 +805,9 @@ export default function ThreadClient({
     });
   }
 
+  const threadCurrentVote =
+    votes[makeVoteKey("thread", thread.id)] ?? (0 as VoteValue);
+
   return (
     <>
       <section className="space-y-6">
@@ -839,7 +875,15 @@ export default function ThreadClient({
           </p>
 
           <div className="mt-2 flex items-center justify-between">
-            <div>{renderVoteControls("thread", thread.id, threadScore)}</div>
+            <VoteControls
+              targetType="thread"
+              targetId={thread.id}
+              score={threadScore}
+              currentVote={threadCurrentVote}
+              onVote={(targetType, targetId, direction) =>
+                void applyVote(targetType, targetId, direction)
+              }
+            />
             {isOwner && (
               <button
                 type="button"
@@ -858,95 +902,26 @@ export default function ThreadClient({
           )}
         </article>
 
-        {/* Primary comment composer: directly under the post, above the comments list */}
-        <div className="rounded-lg bg-white pt-3 pb-3 text-xs text-zinc-700 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-200">
-          {loading ? (
-            <p>Checking your session…</p>
-          ) : user ? (
-            <form onSubmit={handleSubmitComment} className="space-y-2">
-              <div
-                className={[
-                  "relative rounded-md border bg-white text-xs shadow-sm transition dark:bg-zinc-950",
-                  isCommentBoxExpanded
-                    ? "border-zinc-900 ring-1 ring-zinc-900 dark:border-zinc-100 dark:ring-zinc-100"
-                    : "cursor-text border-zinc-300 hover:border-zinc-900 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:border-zinc-100 dark:hover:bg-zinc-900",
-                ].join(" ")}
-                onClick={() => {
-                  if (!isCommentBoxExpanded) {
-                    setIsCommentBoxExpanded(true);
-                  }
-                }}
-              >
-                {isCommentBoxExpanded ? (
-                  <textarea
-                    id="new-comment"
-                    rows={4}
-                    value={commentBody}
-                    onChange={(e) => setCommentBody(e.target.value)}
-                    placeholder="Write a comment…"
-                    className="block w-full rounded-md border-0 bg-transparent px-1 py-2 text-xs text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 dark:text-zinc-100"
-                  />
-                ) : (
-                  <div className="px-1 py-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    Write a comment…
-                  </div>
-                )}
-              </div>
-              {commentError && replyingTo === null && (
-                <p className="text-[11px] text-red-600 dark:text-red-400">
-                  {commentError}
-                </p>
-              )}
-              {isCommentBoxExpanded && (
-                <div className="space-y-2 text-[10px] text-zinc-500 dark:text-zinc-400">
-                  <p>
-                    {commentBody.length > 0
-                      ? `${commentBody.length} character${
-                          commentBody.length === 1 ? "" : "s"
-                        }`
-                      : "If you haven't already, would you mind reading about our approach to comments and site guidelines?"
-                    }
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="submit"
-                      disabled={commentSubmitting || !commentBody.trim()}
-                      className="inline-flex items-center rounded-md bg-zinc-900 px-3 py-1.5 text-[11px] font-medium text-zinc-50 shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-                    >
-                      {commentSubmitting ? "Posting…" : "Post"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCommentBoxExpanded(false);
-                        setCommentBody("");
-                        setCommentError(null);
-                      }}
-                      className="text-[10px] text-zinc-500 hover:underline dark:text-zinc-400"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-            </form>
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p>
-                <span className="font-medium">Want to join the discussion?</span>{" "}
-                <span>
-                  Sign in with a wallet or email to post comments.
-                </span>
-              </p>
-              <Link
-                href="/auth"
-                className="inline-flex items-center rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
-              >
-                Sign in
-              </Link>
-            </div>
-          )}
-        </div>
+        <CommentComposer
+          loading={loading}
+          isAuthenticated={!!user}
+          commentBody={commentBody}
+          isExpanded={isCommentBoxExpanded}
+          submitting={commentSubmitting}
+          error={replyingTo === null ? commentError : null}
+          onChangeBody={setCommentBody}
+          onExpand={() => {
+            if (!isCommentBoxExpanded) {
+              setIsCommentBoxExpanded(true);
+            }
+          }}
+          onCancel={() => {
+            setIsCommentBoxExpanded(false);
+            setCommentBody("");
+            setCommentError(null);
+          }}
+          onSubmit={handleSubmitComment}
+        />
 
         <section className="space-y-3">
           <header className="flex items-center justify-between gap-3">
