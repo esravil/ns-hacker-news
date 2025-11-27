@@ -22,6 +22,7 @@ type CommentRow = {
   author_id: string | null;
   parent_id: number | null;
   author_display_name: string | null;
+  is_deleted: boolean;
 };
 
 interface ThreadPageProps {
@@ -96,10 +97,9 @@ export default async function ThreadPage(props: ThreadPageProps) {
   } = await supabase
     .from("comments")
     .select(
-      "id, body, created_at, author_id, parent_id, profiles!comments_author_id_fkey(display_name)"
+      "id, body, created_at, author_id, parent_id, is_deleted, profiles!comments_author_id_fkey(display_name)"
     )
     .eq("thread_id", threadId)
-    .eq("is_deleted", false)
     .order("created_at", { ascending: true });
 
   if (commentsError) {
@@ -129,6 +129,7 @@ export default async function ThreadPage(props: ThreadPageProps) {
       author_id: authorId,
       parent_id: (row.parent_id as number | null) ?? null,
       author_display_name: displayName,
+      is_deleted: (row.is_deleted as boolean) ?? false,
     };
   });
 

@@ -503,12 +503,20 @@ export default function ThreadClient({
         return;
       }
 
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
-      setCommentScores((prev) => {
-        const next = { ...prev };
-        delete next[commentId];
-        return next;
-      });
+      // Tombstone the comment locally so the tree structure remains intact.
+      setComments((prev) =>
+        prev.map((c) =>
+          c.id === commentId
+            ? {
+                ...c,
+                is_deleted: true,
+                body: "",
+                author_id: null,
+                author_display_name: null,
+              }
+            : c
+        )
+      );
 
       if (replyingTo === commentId) {
         setReplyingTo(null);
@@ -601,13 +609,16 @@ export default function ThreadClient({
       const indentStyle =
         clampedDepth > 0 ? { marginLeft: `${clampedDepth * 0.75}rem` } : undefined;
 
+      const isDeleted = node.is_deleted === true;
+
       const isCommentOwner =
         !!user && !!node.author_id && user.id === node.author_id;
       const score = commentScores[node.id] ?? 0;
 
-      const authorLabel =
-        (node.author_display_name && node.author_display_name.trim()) ||
-        (node.author_id ? `user-${node.author_id.slice(0, 8)}` : "anonymous");
+      const authorLabel = isDeleted
+        ? "[deleted]"
+        : (node.author_display_name && node.author_display_name.trim()) ||
+          (node.author_id ? `user-${node.author_id.slice(0, 8)}` : "anonymous");
 
       const parentId = node.parent_id ?? null;
       const rootId = rootById.get(node.id);
@@ -763,9 +774,7 @@ export default function ThreadClient({
                     <>
                       <span className="text-[10px] text-zinc-400">•</span>
                       <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                        {hiddenRepliesCount === 1
-                          ? "1 reply collapsed"
-                          : `[ ${hiddenRepliesCount} more ]`}
+                        {`[ ${hiddenRepliesCount} more ]`}
                       </span>
                     </>
                   )}
@@ -773,7 +782,16 @@ export default function ThreadClient({
 
                 {!isCollapsed && (
                   <>
-                    <p className="whitespace-pre-wrap">{node.body}</p>
+                    <p
+                      className={[
+                        "whitespace-pre-wrap",
+                        isDeleted
+                          ? "text-xs italic text-zinc-500 dark:text-zinc-500"
+                          : "",
+                      ].join(" ")}
+                    >
+                      {isDeleted ? "[deleted]" : node.body}
+                    </p>
 
                     <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400">
                       <VoteControls
@@ -788,33 +806,37 @@ export default function ThreadClient({
                       <div className="flex flex-wrap items-center gap-2 text-[10px]">
                         {navButtons}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!user) {
-                            router.push("/auth");
-                            return;
-                          }
-                          setReplyingTo(node.id);
-                          setReplyBody("");
-                          setCommentError(null);
-                        }}
-                        className="text-[10px] font-medium text-zinc-500 hover:underline dark:text-zinc-400"
-                      >
-                        Reply
-                      </button>
-                      {isCommentOwner && (
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteComment(node.id)}
-                          className="text-[10px] text-red-600 hover:underline dark:text-red-400"
-                        >
-                          Delete
-                        </button>
+                      {!isDeleted && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!user) {
+                                router.push("/auth");
+                                return;
+                              }
+                              setReplyingTo(node.id);
+                              setReplyBody("");
+                              setCommentError(null);
+                            }}
+                            className="text-[10px] font-medium text-zinc-500 hover:underline dark:text-zinc-400"
+                          >
+                            Reply
+                          </button>
+                          {isCommentOwner && (
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteComment(node.id)}
+                              className="text-[10px] text-red-600 hover:underline dark:text-red-400"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
 
-                    {replyingTo === node.id && (
+                    {replyingTo === node.id && !isDeleted && (
                       <form
                         onSubmit={(event) => void handleSubmitReply(event, node.id)}
                         className="mt-2 space-y-2"

@@ -18,6 +18,7 @@ export type Comment = {
   author_id: string | null;
   parent_id: number | null;
   author_display_name: string | null;
+  is_deleted: boolean;
 };
 
 export type CommentNode = Comment & {
