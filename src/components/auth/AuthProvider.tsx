@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createSupabaseClient } from "@/lib/supabaseClient";
+import { loadInviteToken, clearInviteToken } from "@/lib/inviteToken";
 
 type AuthContextValue = {
   supabase: SupabaseClient;
@@ -69,9 +70,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [supabase]);
 
-  // Ensure a profiles row exists for the signed-in user.
-  // This keeps foreign keys (author_id, user_id, etc.) happy even if the user
-  // never visits /profile explicitly.
+  // Ensure that only invited users can stay signed in, then create a profiles row.
+  // Flow:
+  // - If there is a pending invite token (?invite=... or stored), try to consume it.
+  // - Otherwise, verify the user has at least one signup_tokens.used_by = auth.uid().
+  // - If gating fails, immediately sign the user out.
   useEffect(() => {
     if (!user) {
       return;
@@ -79,26 +82,87 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     let cancelled = false;
 
-    async function ensureProfileRow() {
+    async function gateAndEnsureProfileRow() {
       try {
-        const { error } = await supabase
+        const inviteToken = loadInviteToken();
+
+        if (inviteToken) {
+          const { error: consumeError } = await supabase.rpc(
+            "consume_signup_token",
+            {
+              p_token: inviteToken,
+              p_user_id: user.id,
+            }
+          );
+
+          if (cancelled) return;
+
+          if (consumeError) {
+            console.error(
+              "Failed to consume signup token for user",
+              consumeError
+            );
+            await supabase.auth.signOut();
+            setUser(null);
+            setInviteToken(null);
+            return;
+          }
+
+          setInviteToken(null);
+        } else {
+          const { data, error: lookupError } = await supabase
+            .from("signup_tokens")
+            .select("id")
+            .eq("used_by", user.id)
+            .maybeSingle();
+
+          if (cancelled) return;
+
+          if (lookupError) {
+            console.error(
+              "Failed to verify signup token usage for user",
+              lookupError
+            );
+            await supabase.auth.signOut();
+            setUser(null);
+            return;
+          }
+
+          if (!data) {
+            await supabase.auth.signOut();
+            setUser(null);
+            return;
+          }
+        }
+
+        const { error: profileError } = await supabase
           .from("profiles")
           .upsert(
             { id: user.id },
             { onConflict: "id" }
           );
 
-        if (error && !cancelled) {
-          console.error("Failed to ensure profile row for user", error);
+        if (cancelled) return;
+
+        if (profileError) {
+          console.error("Failed to ensure profile row for user", profileError);
         }
       } catch (err) {
         if (!cancelled) {
           console.error("Unexpected error ensuring profile row", err);
+          supabase.auth
+            .signOut()
+            .then(() => {
+              setUser(null);
+            })
+            .catch((signOutError) => {
+              console.error("Error signing out after failure", signOutError);
+            });
         }
       }
     }
 
-    void ensureProfileRow();
+    void gateAndEnsureProfileRow();
 
     return () => {
       cancelled = true;

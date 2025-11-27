@@ -4,7 +4,11 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import { useAuth } from "./AuthProvider";
 
-export function EmailMagicLinkForm() {
+interface EmailMagicLinkFormProps {
+  signupToken?: string | null;
+}
+
+export function EmailMagicLinkForm({ signupToken }: EmailMagicLinkFormProps) {
   const { supabase } = useAuth();
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -22,10 +26,27 @@ export function EmailMagicLinkForm() {
         throw new Error("Email is required.");
       }
 
-      const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/auth`
-          : undefined;
+      let redirectPath = "/auth";
+
+      if (signupToken && signupToken.trim()) {
+        const trimmed = signupToken.trim();
+        const separator = redirectPath.includes("?") ? "&" : "?";
+        redirectPath = `${redirectPath}${separator}invite=${encodeURIComponent(
+          trimmed
+        )}`;
+      }
+
+      let redirectTo: string | undefined = undefined;
+
+      if (typeof window !== "undefined") {
+        const currentUrl = new URL(window.location.href);
+        const invite = currentUrl.searchParams.get("invite");
+        const baseAuthUrl = `${window.location.origin}/auth`;
+
+        redirectTo = invite
+          ? `${baseAuthUrl}?invite=${encodeURIComponent(invite)}`
+          : baseAuthUrl;
+      }
 
       const { error: signInError } = await supabase.auth.signInWithOtp({
         email: email.trim(),

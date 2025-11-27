@@ -47,7 +47,7 @@ export function SiteHeader() {
       : "bg-red-500 shadow-[0_0_0_3px_rgba(248,113,113,0.35)]",
   ].join(" ");
 
-  const label = loading ? "Checking…" : isAuthed ? "CONNECTED" : "DISCONNECTED";
+  const label = isAuthed ? "Sign out" : "Sign in";
   const shortId = user ? `${user.id.slice(0, 6)}…` : null;
 
   return (
