@@ -50,6 +50,9 @@ export default function ThreadClient({
     initialCommentScores
   );
   const [votes, setVotes] = useState<Record<VoteKey, VoteValue>>({});
+  const [collapsedComments, setCollapsedComments] = useState<
+    Record<number, boolean>
+  >({});
 
   const [commentBody, setCommentBody] = useState("");
   const [replyBody, setReplyBody] = useState("");
@@ -64,6 +67,25 @@ export default function ThreadClient({
   const commentTree = useMemo<CommentNode[]>(() => {
     return buildCommentTree(comments);
   }, [comments]);
+
+  const subtreeSizes = useMemo(() => {
+    const sizes = new Map<number, number>();
+
+    function countSubtree(node: CommentNode): number {
+      let count = 1;
+      for (const child of node.children) {
+        count += countSubtree(child);
+      }
+      sizes.set(node.id, count);
+      return count;
+    }
+
+    for (const root of commentTree) {
+      countSubtree(root);
+    }
+
+    return sizes;
+  }, [commentTree]);
 
   const {
     parentById,
@@ -575,10 +597,9 @@ export default function ThreadClient({
   function renderCommentNodes(nodes: CommentNode[], depth = 0): JSX.Element[] {
     return nodes.map((node) => {
       const clampedDepth = Math.min(depth, MAX_NESTING_DEPTH);
+      const isCollapsed = collapsedComments[node.id] ?? false;
       const indentStyle =
-        clampedDepth > 0
-          ? { marginLeft: `${clampedDepth * 0.75}rem` }
-          : undefined;
+        clampedDepth > 0 ? { marginLeft: `${clampedDepth * 0.75}rem` } : undefined;
 
       const isCommentOwner =
         !!user && !!node.author_id && user.id === node.author_id;
@@ -621,185 +642,236 @@ export default function ThreadClient({
       const currentVote =
         votes[makeVoteKey("comment", node.id)] ?? (0 as VoteValue);
 
+      const totalInSubtree = subtreeSizes.get(node.id) ?? 1;
+      const hiddenRepliesCount = Math.max(totalInSubtree - 1, 0);
+
+      const navButtons = (
+        <>
+          {showRootButton && (
+            <button
+              type="button"
+              onClick={() => goToRootComment(node.id)}
+              className="text-zinc-500 hover:underline dark:text-zinc-400"
+            >
+              root
+            </button>
+          )}
+          {showParentButton && (
+            <button
+              type="button"
+              onClick={() => goToParentComment(node.id)}
+              className="text-zinc-500 hover:underline dark:text-zinc-400"
+            >
+              parent
+            </button>
+          )}
+          {isTopLevelComment ? (
+            <>
+              {canGoPrev && (
+                <button
+                  type="button"
+                  onClick={() => goToPrevComment(node.id)}
+                  className="text-zinc-500 hover:underline dark:text-zinc-400"
+                >
+                  prev
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => goToNextComment(node.id)}
+                disabled={!canGoNext}
+                className="text-zinc-500 hover:underline disabled:opacity-40 disabled:no-underline dark:text-zinc-400"
+              >
+                next
+              </button>
+            </>
+          ) : (
+            <>
+              {canGoPrev && (
+                <button
+                  type="button"
+                  onClick={() => goToPrevComment(node.id)}
+                  className="text-zinc-500 hover:underline dark:text-zinc-400"
+                >
+                  prev
+                </button>
+              )}
+              {canGoNext && (
+                <button
+                  type="button"
+                  onClick={() => goToNextComment(node.id)}
+                  className="text-zinc-500 hover:underline dark:text-zinc-400"
+                >
+                  next
+                </button>
+              )}
+            </>
+          )}
+        </>
+      );
+
       return (
         <li
           key={node.id}
           id={`comment-${node.id}`}
           className="space-y-1 rounded-md"
         >
-          <div
-            style={indentStyle}
-            className={
-              clampedDepth > 0
-                ? "border-l border-zinc-200 pl-3 dark:border-zinc-800"
-                : ""
-            }
-          >
-            <div className="space-y-1 text-sm text-zinc-800 dark:text-zinc-200">
-              <div className="flex items-center gap-2 text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-                {node.author_id ? (
-                  <Link
-                    href={`/u/${node.author_id}`}
-                    className="hover:underline"
-                  >
-                    {authorLabel}
-                  </Link>
-                ) : (
-                  <span>{authorLabel}</span>
-                )}
-                <span className="text-[10px] text-zinc-400">•</span>
-                <span className="font-normal">
-                  {formatTimeAgo(node.created_at)}
-                </span>
-              </div>
+          <div style={indentStyle} className="flex gap-2">
+            {/* Rail: toggle + vertical line directly underneath */}
+            <div className="flex flex-col items-center pt-0.5">
+              <button
+                type="button"
+                aria-label={
+                  isCollapsed
+                    ? "Expand comment thread"
+                    : "Collapse comment thread"
+                }
+                onClick={() =>
+                  setCollapsedComments((prev) => ({
+                    ...prev,
+                    [node.id]: !isCollapsed,
+                  }))
+                }
+                className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border border-zinc-300 bg-white text-[10px] font-semibold leading-none text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              >
+                {isCollapsed ? "+" : "-"}
+              </button>
+              {!isCollapsed && node.children.length > 0 && (
+                <div className="mt-1 flex-1 border-l border-zinc-200 dark:border-zinc-800" />
+              )}
+            </div>
 
-              <p className="whitespace-pre-wrap">{node.body}</p>
-
-              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400">
-                <VoteControls
-                  targetType="comment"
-                  targetId={node.id}
-                  score={score}
-                  currentVote={currentVote}
-                  onVote={(targetType, targetId, direction) =>
-                    void applyVote(targetType, targetId, direction)
-                  }
-                />
-                <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                  {showRootButton && (
-                    <button
-                      type="button"
-                      onClick={() => goToRootComment(node.id)}
-                      className="text-zinc-500 hover:underline dark:text-zinc-400"
+            {/* Content column */}
+            <div className="flex-1">
+              <div className="space-y-1 text-sm text-zinc-800 dark:text-zinc-200">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                  {node.author_id ? (
+                    <Link
+                      href={`/u/${node.author_id}`}
+                      className="hover:underline"
                     >
-                      root
-                    </button>
-                  )}
-                  {showParentButton && (
-                    <button
-                      type="button"
-                      onClick={() => goToParentComment(node.id)}
-                      className="text-zinc-500 hover:underline dark:text-zinc-400"
-                    >
-                      parent
-                    </button>
-                  )}
-                  {isTopLevelComment ? (
-                    <>
-                      {canGoPrev && (
-                        <button
-                          type="button"
-                          onClick={() => goToPrevComment(node.id)}
-                          className="text-zinc-500 hover:underline dark:text-zinc-400"
-                        >
-                          prev
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => goToNextComment(node.id)}
-                        disabled={!canGoNext}
-                        className="text-zinc-500 hover:underline disabled:opacity-40 disabled:no-underline dark:text-zinc-400"
-                      >
-                        next
-                      </button>
-                    </>
+                      {authorLabel}
+                    </Link>
                   ) : (
+                    <span>{authorLabel}</span>
+                  )}
+                  <span className="text-[10px] text-zinc-400">•</span>
+                  <span className="font-normal">
+                    {formatTimeAgo(node.created_at)}
+                  </span>
+                  {isCollapsed && hiddenRepliesCount > 0 && (
                     <>
-                      {canGoPrev && (
-                        <button
-                          type="button"
-                          onClick={() => goToPrevComment(node.id)}
-                          className="text-zinc-500 hover:underline dark:text-zinc-400"
-                        >
-                          prev
-                        </button>
-                      )}
-                      {canGoNext && (
-                        <button
-                          type="button"
-                          onClick={() => goToNextComment(node.id)}
-                          className="text-zinc-500 hover:underline dark:text-zinc-400"
-                        >
-                          next
-                        </button>
-                      )}
+                      <span className="text-[10px] text-zinc-400">•</span>
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                        {hiddenRepliesCount === 1
+                          ? "1 reply collapsed"
+                          : `[ ${hiddenRepliesCount} more ]`}
+                      </span>
                     </>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!user) {
-                      router.push("/auth");
-                      return;
-                    }
-                    setReplyingTo(node.id);
-                    setReplyBody("");
-                    setCommentError(null);
-                  }}
-                  className="text-[10px] font-medium text-zinc-500 hover:underline dark:text-zinc-400"
-                >
-                  Reply
-                </button>
-                {isCommentOwner && (
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteComment(node.id)}
-                    className="text-[10px] text-red-600 hover:underline dark:text-red-400"
-                  >
-                    Delete
-                  </button>
+
+                {!isCollapsed && (
+                  <>
+                    <p className="whitespace-pre-wrap">{node.body}</p>
+
+                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400">
+                      <VoteControls
+                        targetType="comment"
+                        targetId={node.id}
+                        score={score}
+                        currentVote={currentVote}
+                        onVote={(targetType, targetId, direction) =>
+                          void applyVote(targetType, targetId, direction)
+                        }
+                      />
+                      <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                        {navButtons}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!user) {
+                            router.push("/auth");
+                            return;
+                          }
+                          setReplyingTo(node.id);
+                          setReplyBody("");
+                          setCommentError(null);
+                        }}
+                        className="text-[10px] font-medium text-zinc-500 hover:underline dark:text-zinc-400"
+                      >
+                        Reply
+                      </button>
+                      {isCommentOwner && (
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteComment(node.id)}
+                          className="text-[10px] text-red-600 hover:underline dark:text-red-400"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+
+                    {replyingTo === node.id && (
+                      <form
+                        onSubmit={(event) => void handleSubmitReply(event, node.id)}
+                        className="mt-2 space-y-2"
+                      >
+                        <textarea
+                          rows={3}
+                          value={replyBody}
+                          onChange={(e) => setReplyBody(e.target.value)}
+                          placeholder="Write your reply…"
+                          className="block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
+                        />
+                        {commentError && (
+                          <p className="text-[11px] text-red-600 dark:text-red-400">
+                            {commentError}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="submit"
+                            disabled={commentSubmitting}
+                            className="inline-flex items-center rounded-md bg-zinc-900 px-3 py-1.5 text-[11px] font-medium text-zinc-50 shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                          >
+                            {commentSubmitting ? "Replying…" : "Post reply"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReplyingTo(null);
+                              setReplyBody("");
+                              setCommentError(null);
+                            }}
+                            className="text-[10px] text-zinc-500 hover:underline dark:text-zinc-400"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </>
+                )}
+
+                {isCollapsed && (
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {navButtons}
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {replyingTo === node.id && (
-                <form
-                  onSubmit={(event) => void handleSubmitReply(event, node.id)}
-                  className="mt-2 space-y-2"
-                >
-                  <textarea
-                    rows={3}
-                    value={replyBody}
-                    onChange={(e) => setReplyBody(e.target.value)}
-                    placeholder="Write your reply…"
-                    className="block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-100 dark:focus:ring-zinc-100"
-                  />
-                  {commentError && (
-                    <p className="text-[11px] text-red-600 dark:text-red-400">
-                      {commentError}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="submit"
-                      disabled={commentSubmitting}
-                      className="inline-flex items-center rounded-md bg-zinc-900 px-3 py-1.5 text-[11px] font-medium text-zinc-50 shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-                    >
-                      {commentSubmitting ? "Replying…" : "Post reply"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReplyingTo(null);
-                        setReplyBody("");
-                        setCommentError(null);
-                      }}
-                      className="text-[10px] text-zinc-500 hover:underline dark:text-zinc-400"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
+              {!isCollapsed && node.children.length > 0 && (
+                <ul className="mt-2 space-y-2">
+                  {renderCommentNodes(node.children, depth + 1)}
+                </ul>
               )}
             </div>
           </div>
-
-          {node.children.length > 0 && (
-            <ul className="mt-2 space-y-2">
-              {renderCommentNodes(node.children, depth + 1)}
-            </ul>
-          )}
         </li>
       );
     });
