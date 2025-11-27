@@ -198,7 +198,10 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
 
           return (
             <li key={thread.id} className="flex justify-center">
-              <article className="w-full max-w-2xl rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+              <article
+                onClick={() => router.push(`/thread/${thread.id}`)}
+                className="w-full max-w-2xl cursor-pointer rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+              >
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 space-y-1">
@@ -215,6 +218,9 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
                             <Link
                               href={`/u/${thread.author_id}`}
                               className="hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
                             >
                               {thread.author_display_name}
                             </Link>
@@ -224,12 +230,6 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
                         </span>
                       </div>
                     </div>
-                    <Link
-                      href={`/thread/${thread.id}`}
-                      className="hidden text-[11px] font-medium text-zinc-500 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100 md:inline"
-                    >
-                      View
-                    </Link>
                   </div>
 
                   <div className="text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -243,6 +243,9 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
                       >
                         <span>Open link</span>
                         <span aria-hidden>↗</span>
@@ -269,15 +272,21 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
                     )}
 
                   <div className="flex items-center gap-3">
-                    <VoteControls
-                      targetType="thread"
-                      targetId={thread.id}
-                      score={thread.score}
-                      currentVote={current}
-                      onVote={(_, targetId, direction) =>
-                        void applyVote(targetId, direction)
-                      }
-                    />
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <VoteControls
+                        targetType="thread"
+                        targetId={thread.id}
+                        score={thread.score}
+                        currentVote={current}
+                        onVote={(_, targetId, direction) =>
+                          void applyVote(targetId, direction)
+                        }
+                      />
+                    </div>
                   </div>
                 </div>
               </article>
