@@ -47,9 +47,17 @@ export default async function PublicProfilePage(props: PublicProfilePageProps) {
     created_at: null,
   };
 
+  const rawDisplayName =
+    profile.display_name && profile.display_name.trim();
+  const shortId =
+    profile.id && profile.id.length >= 8
+      ? profile.id.slice(0, 8)
+      : profile.id || null;
+
   const displayName =
-    (profile.display_name && profile.display_name.trim()) ||
-    (profile.id ? `user-${profile.id.slice(0, 8)}` : "anonymous");
+    rawDisplayName && shortId
+      ? `${rawDisplayName} · ${shortId}`
+      : shortId || rawDisplayName || "anonymous";
 
   const joinedAt = profile.created_at;
 

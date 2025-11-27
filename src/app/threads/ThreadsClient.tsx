@@ -196,6 +196,17 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
         {threads.map((thread) => {
           const current = votes[thread.id] ?? 0;
 
+          const rawDisplayName =
+            thread.author_display_name && thread.author_display_name.trim();
+          const shortId =
+            thread.author_id && thread.author_id.length >= 8
+              ? thread.author_id.slice(0, 4)
+              : null;
+          const authorLabel =
+            rawDisplayName && shortId
+              ? `${rawDisplayName} · ${shortId}`
+              : shortId ?? rawDisplayName ?? "anonymous";
+
           return (
             <li key={thread.id} className="flex justify-center">
               <article
@@ -222,10 +233,10 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
                                 e.stopPropagation();
                               }}
                             >
-                              {thread.author_display_name}
+                              {authorLabel}
                             </Link>
                           ) : (
-                            thread.author_display_name
+                            authorLabel
                           )}
                         </span>
                       </div>

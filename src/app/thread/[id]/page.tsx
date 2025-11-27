@@ -70,7 +70,7 @@ export default async function ThreadPage(props: ThreadPageProps) {
 
   const threadFallbackName =
     threadAuthorId && threadAuthorId.length >= 8
-      ? `user-${threadAuthorId.slice(0, 8)}`
+      ? `${threadAuthorId.slice(0, 8)}`
       : "anonymous";
 
   const threadDisplayName =
@@ -115,21 +115,13 @@ export default async function ThreadPage(props: ThreadPageProps) {
     const authorDisplayName =
       (row.profiles?.display_name as string | null) ?? null;
 
-    const fallbackName =
-      authorId && authorId.length >= 8
-        ? `user-${authorId.slice(0, 8)}`
-        : "anonymous";
-
-    const displayName =
-      (authorDisplayName && authorDisplayName.trim()) || fallbackName;
-
     return {
       id: row.id as number,
       body: row.body as string,
       created_at: row.created_at as string,
       author_id: authorId,
       parent_id: (row.parent_id as number | null) ?? null,
-      author_display_name: displayName,
+      author_display_name: authorDisplayName,
       is_deleted: (row.is_deleted as boolean) ?? false,
     };
   });

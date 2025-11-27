@@ -73,14 +73,6 @@ export default async function HomePage() {
       const authorDisplayName =
         (row.profiles?.display_name as string | null) ?? null;
 
-      const fallbackName =
-        authorId && authorId.length >= 8
-          ? `user-${authorId.slice(0, 8)}`
-          : "anonymous";
-
-      const displayName =
-        (authorDisplayName && authorDisplayName.trim()) || fallbackName;
-
       const id = row.id as number;
 
       return {
@@ -88,7 +80,7 @@ export default async function HomePage() {
         title: row.title as string,
         created_at: row.created_at as string,
         author_id: authorId,
-        author_display_name: displayName,
+        author_display_name: authorDisplayName,
         score: scores[id] ?? 0,
         url: (row.url as string | null) ?? null,
         url_domain: (row.url_domain as string | null) ?? null,

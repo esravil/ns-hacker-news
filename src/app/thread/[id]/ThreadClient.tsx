@@ -338,12 +338,18 @@ export default function ThreadClient({
   const isOwner =
     !!user && !!thread.author_id && user.id === thread.author_id;
 
+  const threadRawDisplayName =
+    thread.author_display_name && thread.author_display_name.trim();
+  const threadShortId =
+    thread.author_id && thread.author_id.length >= 8
+      ? thread.author_id.slice(0, 4)
+      : null;
+
   const threadAuthorDisplayName = isThreadDeleted
     ? "[ redacted ]"
-    : (thread.author_display_name && thread.author_display_name.trim()) ||
-      (thread.author_id
-        ? `user-${thread.author_id.slice(0, 8)}`
-        : "anonymous");
+    : threadRawDisplayName && threadShortId
+      ? `${threadRawDisplayName} · ${threadShortId}`
+      : threadShortId ?? threadRawDisplayName ?? "anonymous";
 
   async function handleDeleteThread() {
     if (!user) {
@@ -618,10 +624,18 @@ export default function ThreadClient({
         !!user && !!node.author_id && user.id === node.author_id;
       const score = commentScores[node.id] ?? 0;
 
+      const rawAuthorDisplayName =
+        node.author_display_name && node.author_display_name.trim();
+      const authorShortId =
+        node.author_id && node.author_id.length >= 8
+          ? node.author_id.slice(0, 4)
+          : null;
+
       const authorLabel = isDeleted
         ? "[deleted]"
-        : (node.author_display_name && node.author_display_name.trim()) ||
-          (node.author_id ? `user-${node.author_id.slice(0, 8)}` : "anonymous");
+        : rawAuthorDisplayName && authorShortId
+          ? `${rawAuthorDisplayName} · ${authorShortId}`
+          : authorShortId ?? rawAuthorDisplayName ?? "anonymous";
 
       const parentId = node.parent_id ?? null;
       const rootId = rootById.get(node.id);

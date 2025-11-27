@@ -117,10 +117,15 @@ export default function ProfilePage() {
     ? user.id.split("-")[0]
     : "anonymous";
 
-  const headingName =
+  const activeDisplayName =
     (displayName && displayName.trim()) ||
     (profile?.display_name && profile.display_name.trim()) ||
-    derivedDefaultName;
+    "";
+
+  const headingName =
+    activeDisplayName && derivedDefaultName
+      ? `${activeDisplayName} · ${derivedDefaultName}`
+      : derivedDefaultName;
 
   const joinedAt =
     profile?.created_at || (user as any)?.created_at || null;
