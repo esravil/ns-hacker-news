@@ -8,6 +8,12 @@ interface EmailMagicLinkFormProps {
   signupToken?: string | null;
 }
 
+function isValidEmail(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
 export function EmailMagicLinkForm({ signupToken }: EmailMagicLinkFormProps) {
   const { supabase } = useAuth();
   const [email, setEmail] = useState("");
@@ -24,6 +30,10 @@ export function EmailMagicLinkForm({ signupToken }: EmailMagicLinkFormProps) {
     try {
       if (!email.trim()) {
         throw new Error("Email is required.");
+      }
+
+      if (!isValidEmail(email)) {
+        throw new Error("Enter a valid email address.");
       }
 
       let redirectPath = "/auth";
@@ -80,12 +90,6 @@ export function EmailMagicLinkForm({ signupToken }: EmailMagicLinkFormProps) {
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="space-y-1">
-          <label
-            htmlFor="email"
-            className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            Email address
-          </label>
           <input
             id="email"
             type="email"
@@ -99,7 +103,7 @@ export function EmailMagicLinkForm({ signupToken }: EmailMagicLinkFormProps) {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !isValidEmail(email)}
           className="inline-flex w-full items-center justify-center rounded-md bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-50 shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
           {submitting ? "Sending..." : "Send magic link"}

@@ -97,7 +97,7 @@ export function Web3SignInPanel() {
         <button
           type="button"
           onClick={handleSignInWithWallet}
-          disabled={submitting}
+          disabled={submitting || !account || !account.address}
           className="inline-flex flex-1 items-center justify-center rounded-md bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-50 shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
           {submitting ? "Signing in..." : "Sign in with wallet"}
@@ -109,8 +109,7 @@ export function Web3SignInPanel() {
           <p></p>
         ) : (
           <p>
-            Choose a wallet from the dropdown above, then click{" "}
-            <span className="font-mono">Sign in with wallet</span>.
+            
           </p>
         )}
       </div>
