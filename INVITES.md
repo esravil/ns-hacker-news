@@ -30,22 +30,9 @@ The React app calls `enforce_invite_for_user()` automatically right after any si
 
 ---
 
-## How QR-gated signup works (on-site attendees)
+## How QR-gated signup works (on-site attendees vs previous cohorts)
 
-1. You generate a **batch QR token** in Supabase:
-
-   ```sql
-   insert into public.signup_tokens (token, kind, metadata)
-   values (
-     encode(gen_random_bytes(16), 'hex'),
-     'qr_batch',
-     jsonb_build_object(
-       'note', 'Local dev batch for event',
-       'generated_by', 'admin@example.com'
-     )
-   )
-   returning *;
-   ```
+*Look at INVITE_TOKENS.md to understand how to make tokens*
 
 2. Take the token stirng from the result (e.g. abcd123...) and embed it in the QR URL:
 example-domain.com/auth?invite={string}

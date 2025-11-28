@@ -72,8 +72,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Ensure that only invited users can stay signed in, then create a profiles row.
   // Flow:
-  // - If there is a pending invite token (?invite=... or stored), try to consume it.
-  // - Otherwise, verify the user has at least one signup_tokens.used_by = auth.uid().
+  // - Call the database gate (enforce_invite_for_user) with any pending invite token.
+  // - If the user has already consumed an invite, the function is a no-op.
   // - If gating fails, immediately sign the user out.
   useEffect(() => {
     if (!user) {
@@ -86,61 +86,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         const inviteToken = loadInviteToken();
 
-        if (inviteToken) {
-          const { error: consumeError } = await supabase.rpc(
-            "consume_signup_token",
-            {
-              p_token: inviteToken,
-              p_user_id: user.id,
-            }
-          );
-
-          if (cancelled) return;
-
-          if (consumeError) {
-            console.error(
-              "Failed to consume signup token for user",
-              consumeError
-            );
-            await supabase.auth.signOut();
-            setUser(null);
-            setInviteToken(null);
-            return;
+        const { error: gateError } = await supabase.rpc(
+          "enforce_invite_for_user",
+          {
+            p_invite_token: inviteToken,
           }
+        );
 
-          setInviteToken(null);
-        } else {
-          const { data, error: lookupError } = await supabase
-            .from("signup_tokens")
-            .select("id")
-            .eq("used_by", user.id)
-            .maybeSingle();
+        if (cancelled) return;
 
-          if (cancelled) return;
-
-          if (lookupError) {
-            console.error(
-              "Failed to verify signup token usage for user",
-              lookupError
-            );
-            await supabase.auth.signOut();
-            setUser(null);
-            return;
-          }
-
-          if (!data) {
-            await supabase.auth.signOut();
-            setUser(null);
-            return;
-          }
+        if (gateError) {
+          console.error("Invite enforcement failed; signing out.", gateError);
+          clearInviteToken();
+          await supabase.auth.signOut();
+          setUser(null);
+          return;
         }
+
+        clearInviteToken();
 
         const { error: profileError } = await supabase
           .from("profiles")
-          .upsert(
-            { id: user.id },
-            { onConflict: "id" }
-          );
+          .upsert({ id: user.id }, { onConflict: "id" });
 
         if (cancelled) return;
 
@@ -149,7 +116,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error("Unexpected error ensuring profile row", err);
+          console.error("Unexpected error enforcing invite gate", err);
+          clearInviteToken();
           supabase.auth
             .signOut()
             .then(() => {

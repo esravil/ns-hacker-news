@@ -45,3 +45,6 @@ next-env.d.ts
 
 # db stuff
 supabase/
+
+# readme for dev eyes only
+INVITE_TOKENS.md
