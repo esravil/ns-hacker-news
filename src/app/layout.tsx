@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { SolanaProvider } from "@/components/solana/SolanaProvider";
 import { ToastProvider } from "@/components/ui/ToastProvider";
+import { ConfirmProvider } from "@/components/ui/ConfirmProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,7 +36,9 @@ export default function RootLayout({
         <AuthProvider>
           <SolanaProvider>
             <ToastProvider>
-              <AppShell>{children}</AppShell>
+              <ConfirmProvider>
+                <AppShell>{children}</AppShell>
+              </ConfirmProvider>
             </ToastProvider>
           </SolanaProvider>
         </AuthProvider>

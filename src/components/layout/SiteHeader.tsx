@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 export function SiteHeader() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, isAdmin } = useAuth();
   const router = useRouter();
 
   const isAuthed = !!user;
@@ -73,6 +73,14 @@ export function SiteHeader() {
                 className="rounded px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
               >
                 Profile
+              </Link>
+            )}
+            {isAuthed && isAdmin && (
+              <Link
+                href="/mod"
+                className="rounded px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              >
+                Mod
               </Link>
             )}
           </nav>

@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useConfirm } from "@/components/ui/ConfirmProvider";
 
 type ProfileRow = {
   id: string;
@@ -14,6 +15,7 @@ type ProfileRow = {
 export default function ProfilePage() {
   const { user, loading, supabase, signOut } = useAuth();
   const router = useRouter();
+  const confirm = useConfirm();
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -190,9 +192,13 @@ export default function ProfilePage() {
   async function handleDeleteAccount() {
     if (!user || deleteLoading) return;
 
-    const confirmed = window.confirm(
-      "This will permanently delete your account and anonymize your posts. This cannot be undone. Do you want to continue?"
-    );
+    const confirmed = await confirm({
+      title: "Delete account?",
+      description:
+        "This will permanently delete your account and anonymize your posts. This cannot be undone.",
+      confirmLabel: "Delete account",
+      cancelLabel: "Cancel",
+    });
 
     if (!confirmed) {
       return;

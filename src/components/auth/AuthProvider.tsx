@@ -16,10 +16,11 @@ type AuthContextValue = {
   supabase: SupabaseClient;
   user: User | null;
   loading: boolean;
+  isAdmin: boolean;
   signOut: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const AuthContext = createContext(undefined as AuthContextValue | undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -31,12 +32,14 @@ interface AuthProviderProps {
  * - Creates a browser Supabase client instance.
  * - Hydrates initial user from the current session.
  * - Subscribes to auth state changes.
- * - Ensures a corresponding profiles row exists for each signed-in user.
+ * - Ensures a corresponding profiles row exists for each signed-in user and
+ *   keeps an isAdmin flag in sync with public.profiles.is_admin.
  */
 export function AuthProvider({ children }: AuthProviderProps) {
-  const supabase = useMemo(() => createSupabaseClient(), []);
-  const [user, setUser] = useState<User | null>(null);
+  const supabase: SupabaseClient = useMemo(() => createSupabaseClient(), []);
+  const [user, setUser] = useState(null as User | null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Hydrate initial user and subscribe to auth changes
   useEffect(() => {
@@ -70,13 +73,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [supabase]);
 
-  // Ensure that only invited users can stay signed in, then create a profiles row.
-  // Flow:
-  // - Call the database gate (enforce_invite_for_user) with any pending invite token.
-  // - If the user has already consumed an invite, the function is a no-op.
-  // - If gating fails, immediately sign the user out.
+  // Enforce invite gate + ensure profile row + sync isAdmin from profiles.is_admin.
   useEffect(() => {
     if (!user) {
+      setIsAdmin(false);
       return;
     }
 
@@ -100,19 +100,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
           clearInviteToken();
           await supabase.auth.signOut();
           setUser(null);
+          setIsAdmin(false);
           return;
         }
 
         clearInviteToken();
 
-        const { error: profileError } = await supabase
+        const { data: profileRow, error: profileError } = await supabase
           .from("profiles")
-          .upsert({ id: user.id }, { onConflict: "id" });
+          .upsert({ id: user.id }, { onConflict: "id" })
+          .select("id, is_admin")
+          .single();
 
         if (cancelled) return;
 
         if (profileError) {
           console.error("Failed to ensure profile row for user", profileError);
+          setIsAdmin(false);
+        } else {
+          setIsAdmin(profileRow?.is_admin === true);
         }
       } catch (err) {
         if (!cancelled) {
@@ -122,6 +128,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             .signOut()
             .then(() => {
               setUser(null);
+              setIsAdmin(false);
             })
             .catch((signOutError) => {
               console.error("Error signing out after failure", signOutError);
@@ -141,9 +148,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     supabase,
     user,
     loading,
+    isAdmin,
     signOut: async () => {
       await supabase.auth.signOut();
       setUser(null);
+      setIsAdmin(false);
     },
   };
 
