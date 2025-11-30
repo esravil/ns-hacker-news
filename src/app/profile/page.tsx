@@ -12,7 +12,7 @@ type ProfileRow = {
 };
 
 export default function ProfilePage() {
-  const { user, loading, supabase } = useAuth();
+  const { user, loading, supabase, signOut } = useAuth();
   const router = useRouter();
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -24,6 +24,9 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // If not authed, bounce to auth
   useEffect(() => {
@@ -184,6 +187,68 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleDeleteAccount() {
+    if (!user || deleteLoading) return;
+
+    const confirmed = window.confirm(
+      "This will permanently delete your account and anonymize your posts. This cannot be undone. Do you want to continue?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleteLoading(true);
+    setDeleteError(null);
+
+    try {
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+
+      if (sessionError || !sessionData?.session?.access_token) {
+        console.error(
+          "Failed to get session for account deletion",
+          sessionError
+        );
+        setDeleteError(
+          "We couldn't verify your session. Please refresh the page and try again."
+        );
+        setDeleteLoading(false);
+        return;
+      }
+
+      const accessToken = sessionData.session.access_token;
+
+      const response = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+
+        const message =
+          payload?.error ||
+          "We couldn't delete your account. Please try again.";
+        setDeleteError(message);
+        setDeleteLoading(false);
+        return;
+      }
+
+      // Ensure local session is cleared and take the user back home.
+      await signOut();
+      router.replace("/");
+    } catch (err) {
+      console.error("Unexpected error deleting account", err);
+      setDeleteError("We couldn't delete your account. Please try again.");
+      setDeleteLoading(false);
+    }
+  }
+
   return (
     <section className="flex flex-1 items-center justify-center py-10">
       <div className="w-full max-w-md space-y-5 rounded-xl border border-zinc-200 bg-white p-6 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -270,6 +335,33 @@ export default function ProfilePage() {
 
         <div className="border-t border-zinc-200 pt-3 text-xs text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
           <p>{aboutPreview}</p>
+        </div>
+
+        <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide">
+                Danger zone
+              </p>
+              <p className="text-[11px] text-red-700 dark:text-red-200/90">
+                Deleting your account will remove your profile and anonymize your
+                posts. This action cannot be undone.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleDeleteAccount()}
+              disabled={deleteLoading}
+              className="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-[11px] font-medium text-red-50 shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-red-500 dark:hover:bg-red-600"
+            >
+              {deleteLoading ? "Deleting…" : "Delete account"}
+            </button>
+          </div>
+          {deleteError && (
+            <p className="mt-2 text-[11px] text-red-800 dark:text-red-200">
+              {deleteError}
+            </p>
+          )}
         </div>
       </div>
     </section>
