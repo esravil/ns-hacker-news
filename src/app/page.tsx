@@ -109,26 +109,46 @@ export default async function HomePage() {
         <p className="mb-1 font-medium">Current status</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Supabase auth (Solana wallet + email magic link), profiles, and
-            row-level security are wired up.
+            Supabase auth (Solana wallet + email magic link) and profiles are
+            wired up, with row-level security enforced in Postgres.
+          </li>
+          <li>
+            The app is invite-only: signup is gated by Supabase RPCs around{" "}
+            <span className="font-mono text-[11px]">signup_tokens</span>, with
+            support for QR-batch invites and legacy one-time links. After
+            sign-in, the backend enforces{" "}
+            <span className="font-mono text-[11px]">
+              enforce_invite_for_user
+            </span>{" "}
+            before letting a session stick.
           </li>
           <li>
             Threads and comments can be created, replied to, and soft-deleted by
-            their authors. Threads also support optional external URLs (with
-            domain badges) and image attachments stored in R2, which are shown
-            inline on thread pages and in the listing.
+            their authors. Threads support optional external URLs (with domain
+            badges) and image attachments uploaded via the{" "}
+            <span className="font-mono text-[11px]">/api/upload</span> route and
+            rendered inline on thread pages and in the listing.
           </li>
           <li>
-            Upvotes and downvotes are stored per-user in the{" "}
+            Upvotes and downvotes are stored per user in the{" "}
             <span className="font-mono text-[11px]">votes</span> table and
-            aggregated per thread and comment.
+            aggregated per thread and comment, with interactive voting in the
+            client.
+          </li>
+          <li>
+            Basic moderation tools exist: admins (from{" "}
+            <span className="font-mono text-[11px]">profiles.is_admin</span>)
+            get a{" "}
+            <span className="font-mono text-[11px]">/mod</span> dashboard to
+            soft-remove threads and comments via protected API routes.
           </li>
           <li>
             Profiles expose optional display names and a short about section for
             anonymous identities, with public views at{" "}
-            <span className="font-mono text-[11px]">/u/:id</span> and a private
+            <span className="font-mono text-[11px]">/u/:id</span>, a private
             editor at{" "}
-            <span className="font-mono text-[11px]">/profile</span>.
+            <span className="font-mono text-[11px]">/profile</span>, and an
+            account deletion flow that anonymizes content before sign-out.
           </li>
         </ul>
       </div>
