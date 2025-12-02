@@ -27,7 +27,7 @@ export function SiteHeader() {
     "rounded-full",
     "px-3",
     "py-1.5",
-    "text-[11px]",
+    "text-xs",
     "font-medium",
     "shadow-sm",
     "transition",
@@ -51,16 +51,16 @@ export function SiteHeader() {
   const shortId = user ? `${user.id.slice(0, 6)}…` : null;
 
   return (
-    <header className="border-b border-zinc-200 bg-background/80 backdrop-blur dark:border-zinc-800">
-      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+    <header className="mt-2 bg-background/80 backdrop-blur">
+      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 pt-3 pb-2">
         <Link href="/" className="flex items-center gap-2">
-          <span className="text-sm font-semibold tracking-tight">
-            nsreddit <span className="text-xs opacity-60">dev</span>
+          <span className="text-base font-semibold tracking-tight">
+            nsreddit <span className="text-sm opacity-60">dev</span>
           </span>
         </Link>
 
         <div className="flex items-center gap-4">
-          <nav className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+          <nav className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
             <Link
               href="/new"
               className="rounded px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
@@ -94,7 +94,7 @@ export function SiteHeader() {
             <span className={statusDotClasses} />
             <span>{label}</span>
             {isAuthed && shortId && (
-              <span className="hidden font-mono text-[10px] text-emerald-700 dark:text-emerald-200 sm:inline">
+              <span className="hidden font-mono text-xs text-emerald-700 dark:text-emerald-200 sm:inline">
                 {shortId}
               </span>
             )}

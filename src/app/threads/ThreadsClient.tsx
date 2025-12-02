@@ -208,7 +208,7 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
               : shortId ?? rawDisplayName ?? "anonymous";
 
           return (
-            <li key={thread.id} className="flex justify-center">
+            <li key={thread.id}>
               <article
                 onClick={() => router.push(`/thread/${thread.id}`)}
                 className="w-full max-w-2xl cursor-pointer rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
