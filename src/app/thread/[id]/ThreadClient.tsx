@@ -742,28 +742,26 @@ export default function ThreadClient({
         <li
           key={node.id}
           id={`comment-${node.id}`}
-          className="space-y-1 rounded-md"
+          className="space-y-2 rounded-md py-1.5"
         >
           <div style={indentStyle} className="flex gap-2">
             {/* Rail: toggle + vertical line directly underneath */}
             <div className="flex flex-col items-center pt-0.5">
-              <button
-                type="button"
-                aria-label={
-                  isCollapsed
-                    ? "Expand comment thread"
-                    : "Collapse comment thread"
-                }
+              <span
                 onClick={() =>
                   setCollapsedComments((prev) => ({
                     ...prev,
                     [node.id]: !isCollapsed,
                   }))
                 }
-                className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border border-zinc-300 bg-white text-[10px] font-semibold leading-none text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                className="cursor-pointer text-[13px] text-zinc-700 hover:text-zinc-900 dark:text-zinc-200 dark:hover:text-zinc-50"
               >
-                {isCollapsed ? "+" : "-"}
-              </button>
+                [
+                <span className="relative top-[1px]">
+                  {isCollapsed ? " + " : " − "}
+                </span>
+                ]
+              </span>
               {!isCollapsed && node.children.length > 0 && (
                 <div className="mt-1 flex-1 border-l border-zinc-200 dark:border-zinc-800" />
               )}
@@ -771,8 +769,8 @@ export default function ThreadClient({
 
             {/* Content column */}
             <div className="flex-1">
-              <div className="space-y-1 text-sm text-zinc-800 dark:text-zinc-200">
-                <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+              <div className="space-y-1 text-[13px] text-zinc-800 dark:text-zinc-200 pt-0.5">
+                <div className="flex flex-wrap items-center gap-2 font-medium text-zinc-600 dark:text-zinc-400">
                   {node.author_id ? (
                     <Link
                       href={`/u/${node.author_id}`}
@@ -803,7 +801,7 @@ export default function ThreadClient({
                       className={[
                         "whitespace-pre-wrap",
                         isDeleted
-                          ? "text-xs italic text-zinc-500 dark:text-zinc-500"
+                          ? "italic text-zinc-500 dark:text-zinc-500"
                           : "",
                       ].join(" ")}
                     >
@@ -905,7 +903,7 @@ export default function ThreadClient({
               </div>
 
               {!isCollapsed && node.children.length > 0 && (
-                <ul className="mt-2 space-y-2">
+                <ul className="mt-2 space-y-3">
                   {renderCommentNodes(node.children, depth + 1)}
                 </ul>
               )}
@@ -1053,7 +1051,7 @@ export default function ThreadClient({
           )}
 
           {commentTree.length > 0 && (
-            <ul className="space-y-2">{renderCommentNodes(commentTree)}</ul>
+            <ul className="space-y-3">{renderCommentNodes(commentTree)}</ul>
           )}
 
           {deleteError && (

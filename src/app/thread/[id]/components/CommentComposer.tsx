@@ -92,11 +92,29 @@ export function CommentComposer({
         {isExpanded && (
           <div className="space-y-2 text-[10px] text-zinc-500 dark:text-zinc-400">
             <p>
-              {commentBody.length > 0
-                ? `${commentBody.length} character${
-                    commentBody.length === 1 ? "" : "s"
-                  }`
-                : "If you haven't already, would you mind reading about our approach to comments and site guidelines?"}
+              {commentBody.length > 0 ? (
+                `${commentBody.length} character${
+                  commentBody.length === 1 ? "" : "s"
+                }`
+              ) : (
+                <>
+                  If you haven&apos;t already, would you mind reading our{" "}
+                  <Link
+                    href="/comments-guidelines"
+                    className="underline-offset-2 hover:underline"
+                  >
+                    comment guidelines
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    href="/guidelines"
+                    className="underline-offset-2 hover:underline"
+                  >
+                    site guidelines
+                  </Link>
+                  ?
+                </>
+              )}
             </p>
             <div className="flex items-center gap-2">
               <button
