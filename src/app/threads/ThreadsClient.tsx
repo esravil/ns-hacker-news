@@ -6,14 +6,18 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { formatTimeAgo } from "@/lib/time";
 import { VoteControls } from "@/components/votes/VoteControls";
+import { useConfirm } from "@/components/ui/ConfirmProvider";
+import { useToast } from "@/components/ui/ToastProvider";
 
 type ThreadRow = {
   id: number;
   title: string;
+  body?: string | null;
   created_at: string;
   author_id: string | null;
   author_display_name: string | null;
   score: number;
+  comment_count: number;
   url: string | null;
   url_domain: string | null;
   media_url: string | null;
@@ -24,6 +28,7 @@ type VoteValue = -1 | 0 | 1;
 
 interface ThreadsClientProps {
   initialThreads: ThreadRow[];
+  showBodyPreview?: boolean;
 }
 
 function getNextVoteValue(current: VoteValue, direction: 1 | -1): VoteValue {
@@ -42,13 +47,20 @@ function getNextVoteValue(current: VoteValue, direction: 1 | -1): VoteValue {
  * - If an image is attached, show a small thumbnail preview.
  * - Under that, a horizontal vote bar with upvote / score / downvote.
  */
-export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
+export default function ThreadsClient({
+  initialThreads,
+  showBodyPreview = false,
+}: ThreadsClientProps) {
   const { supabase, user, loading } = useAuth();
   const router = useRouter();
+  const confirm = useConfirm();
+  const { showToast } = useToast();
 
   const [threads, setThreads] = useState<ThreadRow[]>(initialThreads);
   const [votes, setVotes] = useState<Record<number, VoteValue>>({});
   const [voteError, setVoteError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [menuOpenFor, setMenuOpenFor] = useState<number | null>(null);
 
   // Threads list is already filtered on the server to exclude deleted threads.
 
@@ -170,6 +182,44 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
     }
   }
 
+  async function handleDeleteThread(thread: ThreadRow) {
+    if (!user) {
+      router.push("/auth");
+      return;
+    }
+
+    setDeleteError(null);
+
+    try {
+      const ok = await confirm({
+        title: "Delete this thread?",
+        description: "This will remove your thread from the listing for everyone.",
+        confirmLabel: "Delete",
+        cancelLabel: "Cancel",
+      });
+
+      if (!ok) {
+        return;
+      }
+
+      const { error } = await supabase.rpc("soft_delete_thread", {
+        p_thread_id: thread.id,
+      });
+
+      if (error) {
+        console.error("Failed to delete thread", error);
+        setDeleteError("Could not delete this thread.");
+        return;
+      }
+
+      setThreads((prev) => prev.filter((t) => t.id !== thread.id));
+      showToast("Thread deleted successfully.");
+    } catch (err) {
+      console.error("Unexpected error deleting thread", err);
+      setDeleteError("Could not delete this thread.");
+    }
+  }
+
   if (threads.length === 0) {
     return (
       <p className="text-sm text-zinc-600 dark:text-zinc-300">
@@ -183,6 +233,12 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
       {voteError && (
         <p className="text-[11px] text-red-600 dark:text-red-400">
           {voteError}
+        </p>
+      )}
+
+      {deleteError && (
+        <p className="text-[11px] text-red-600 dark:text-red-400">
+          {deleteError}
         </p>
       )}
 
@@ -206,6 +262,13 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
             rawDisplayName && shortId
               ? `${rawDisplayName} · ${shortId}`
               : shortId ?? rawDisplayName ?? "anonymous";
+
+          const bodyPreview =
+            showBodyPreview && thread.body
+              ? `${thread.body.trim().slice(0, 200)}${
+                  thread.body.trim().length > 200 ? "…" : ""
+                }`
+              : null;
 
           return (
             <li key={thread.id}>
@@ -241,11 +304,61 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
                         </span>
                       </div>
                     </div>
+                    <div className="flex items-start gap-1">
+                      <button
+                        type="button"
+                        aria-label="Bookmark thread"
+                        className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                      >
+                        <span aria-hidden>★</span>
+                      </button>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          aria-label="Thread actions"
+                          className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenFor((prev) =>
+                              prev === thread.id ? null : thread.id
+                            );
+                          }}
+                        >
+                          <span aria-hidden>⋯</span>
+                        </button>
+                        {menuOpenFor === thread.id &&
+                          user &&
+                          user.id === thread.author_id && (
+                            <div className="absolute right-0 z-10 mt-1 w-32 rounded-md border border-zinc-200 bg-white py-1 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-1 text-left text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMenuOpenFor(null);
+                                  void handleDeleteThread(thread);
+                                }}
+                              >
+                                Delete post
+                              </button>
+                            </div>
+                          )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     {formatTimeAgo(thread.created_at)}
                   </div>
+
+                  {bodyPreview && (
+                    <p className="text-s text-zinc-700 dark:text-zinc-300">
+                      {bodyPreview}
+                    </p>
+                  )}
 
                   {thread.url && (
                     <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
@@ -282,7 +395,9 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
                       </div>
                     )}
 
-                  <div className="flex items-center gap-3">
+                  <div className="mt-3 -mx-4 border-t border-zinc-100 dark:border-zinc-800" />
+
+                  <div className="flex items-center justify-between gap-3 pt-1">
                     <div
                       onClick={(e) => {
                         e.stopPropagation();
@@ -297,6 +412,16 @@ export default function ThreadsClient({ initialThreads }: ThreadsClientProps) {
                           void applyVote(targetId, direction)
                         }
                       />
+                    </div>
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      {thread.comment_count === 0 ? (
+                        <span>Be the first to comment</span>
+                      ) : (
+                        <span>
+                          {thread.comment_count} comment
+                          {thread.comment_count === 1 ? "" : "s"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

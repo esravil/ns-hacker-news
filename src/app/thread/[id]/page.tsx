@@ -32,7 +32,7 @@ interface ThreadPageProps {
   };
 }
 
-export const dynamic = "force-dynamic";
+export const revalidate = 10;
 
 /**
  * Server-side data fetch for a single thread and its comments.

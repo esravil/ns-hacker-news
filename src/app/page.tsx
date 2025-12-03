@@ -5,17 +5,19 @@ import ThreadsClient from "./threads/ThreadsClient";
 type ThreadRow = {
   id: number;
   title: string;
+  body: string | null;
   created_at: string;
   author_id: string | null;
   author_display_name: string | null;
   score: number;
+  comment_count: number;
   url: string | null;
   url_domain: string | null;
   media_url: string | null;
   media_mime_type: string | null;
 };
 
-export const dynamic = "force-dynamic";
+export const revalidate = 10;
 
 /**
  * Home page
@@ -28,60 +30,28 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const supabase = createSupabaseClient();
 
-  // Load threads with joined author display names
-  const { data, error } = await supabase
-    .from("threads")
-    .select(
-      "id, title, created_at, author_id, url, url_domain, media_url, media_mime_type, profiles!threads_author_id_fkey(display_name)"
-    )
-    .eq("is_deleted", false)
-    .order("created_at", { ascending: false });
-
   let threads: ThreadRow[] = [];
   let loadError: string | null = null;
+
+  const { data, error } = await supabase.rpc("get_threads_with_meta");
 
   if (error) {
     console.error("Failed to load threads", error);
     loadError = "Failed to load threads. Check Supabase configuration.";
   } else {
-    const baseRows = (data ?? []) as any[];
-    const threadIds = baseRows.map((row) => row.id as number);
+    const rows = (data ?? []) as any[];
 
-    // Aggregate scores for each thread
-    let scores: Record<number, number> = {};
-
-    if (threadIds.length > 0) {
-      const { data: voteData, error: voteError } = await supabase
-        .from("votes")
-        .select("target_id, value")
-        .eq("target_type", "thread")
-        .in("target_id", threadIds);
-
-      if (voteError) {
-        console.error("Failed to load thread votes", voteError);
-      } else {
-        for (const row of (voteData ?? []) as any[]) {
-          const targetId = row.target_id as number;
-          const value = row.value as number;
-          scores[targetId] = (scores[targetId] ?? 0) + value;
-        }
-      }
-    }
-
-    threads = baseRows.map((row) => {
-      const authorId = (row.author_id as string | null) ?? null;
-      const authorDisplayName =
-        (row.profiles?.display_name as string | null) ?? null;
-
-      const id = row.id as number;
-
+    threads = rows.map((row) => {
       return {
-        id,
+        id: row.id as number,
         title: row.title as string,
+        body: (row.body as string | null) ?? null,
         created_at: row.created_at as string,
-        author_id: authorId,
-        author_display_name: authorDisplayName,
-        score: scores[id] ?? 0,
+        author_id: (row.author_id as string | null) ?? null,
+        author_display_name:
+          (row.author_display_name as string | null) ?? null,
+        score: (row.score as number | null) ?? 0,
+        comment_count: (row.comment_count as number | null) ?? 0,
         url: (row.url as string | null) ?? null,
         url_domain: (row.url_domain as string | null) ?? null,
         media_url: (row.media_url as string | null) ?? null,
@@ -172,13 +142,62 @@ export default async function HomePage() {
           </Link>
         </div>
 
-        {loadError && (
-          <div className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-            {loadError}
-          </div>
-        )}
+        <div className="flex flex-col gap-6 md:flex-row">
+          {/* Left column: threads */}
+          <div className="flex-1 space-y-3">
+            {loadError && (
+              <div className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                {loadError}
+              </div>
+            )}
 
-        {!loadError && <ThreadsClient initialThreads={threads} />}
+            {!loadError && (
+              <ThreadsClient initialThreads={threads} showBodyPreview />
+            )}
+          </div>
+
+          {/* Right column: sidebar container with buttons */}
+          <aside className="w-full md:w-64 lg:w-72">
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Calendar
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Links
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Leaderboard
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Cohorts
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Groups
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                News
+              </button>
+            </div>
+          </aside>
+        </div>
       </section>
     </section>
   );
