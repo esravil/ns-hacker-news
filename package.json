@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.939.0",
+    "@mantine/core": "^8.3.9",
+    "@mantine/dates": "^8.3.9",
     "@supabase/supabase-js": "^2.84.0",
     "@wallet-ui/react": "^2.1.0",
     "date-fns": "^4.1.0",

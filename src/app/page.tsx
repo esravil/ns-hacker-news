@@ -159,15 +159,15 @@ export default async function HomePage() {
           {/* Right column: sidebar container with buttons */}
           <aside className="w-full md:w-64 lg:w-72">
             <div className="space-y-2">
-              <button
-                type="button"
-                className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              <Link
+                href="/calendar"
+                className="block w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-center font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
               >
                 Calendar
-              </button>
+              </Link>
               <Link
                 href="/links"
-                className="block w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-center text-xs font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                className="block w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-center font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
               >
                 Links
               </Link>

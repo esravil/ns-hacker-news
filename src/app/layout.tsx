@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
+import "@mantine/core/styles.css";
+import "@mantine/dates/styles.css";
 import "./globals.css";
+import { MantineProvider } from "@mantine/core";
+import { DatesProvider } from "@mantine/dates";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { SolanaProvider } from "@/components/solana/SolanaProvider";
@@ -33,15 +37,19 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <SolanaProvider>
-            <ToastProvider>
-              <ConfirmProvider>
-                <AppShell>{children}</AppShell>
-              </ConfirmProvider>
-            </ToastProvider>
-          </SolanaProvider>
-        </AuthProvider>
+        <MantineProvider defaultColorScheme="auto">
+          <DatesProvider settings={{ firstDayOfWeek: 1 }}>
+            <AuthProvider>
+              <SolanaProvider>
+                <ToastProvider>
+                  <ConfirmProvider>
+                    <AppShell>{children}</AppShell>
+                  </ConfirmProvider>
+                </ToastProvider>
+              </SolanaProvider>
+            </AuthProvider>
+          </DatesProvider>
+        </MantineProvider>
       </body>
     </html>
   );
