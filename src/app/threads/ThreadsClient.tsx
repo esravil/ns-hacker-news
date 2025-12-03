@@ -112,6 +112,7 @@ export default function ThreadsClient({
     };
   }, [supabase, user?.id, threads.length]);
 
+
   async function applyVote(threadId: number, direction: 1 | -1) {
     setVoteError(null);
 
@@ -332,7 +333,12 @@ export default function ThreadsClient({
                         {menuOpenFor === thread.id &&
                           user &&
                           user.id === thread.author_id && (
-                            <div className="absolute right-0 z-10 mt-1 w-32 rounded-md border border-zinc-200 bg-white py-1 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                            <div
+                              className="absolute right-0 z-10 mt-1 w-32 rounded-md border border-zinc-200 bg-white py-1 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
+                            >
                               <button
                                 type="button"
                                 className="block w-full px-3 py-1 text-left text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
